@@ -2,24 +2,25 @@ import os
 import argparse
 import socket
 import platform
-import psutil
 import netifaces
 import ipaddress
+import getpass
 from scapy.all import IP, TCP, sr1
 import colorama
 from colorama import Fore, Style
 
 colorama.init(autoreset=True)
 terminal_width = int(os.get_terminal_size().columns)
+username = (getpass.getuser())
 
 def print_result(str, subresult=False):
     print(f"{"  |--" if subresult else ""}{Fore.GREEN} [*] {str}{Style.RESET_ALL}")
-def print_error(str):
-    print(f"{Fore.RED} [!] {str}{Style.RESET_ALL}")
-def print_warning(str):
-    print(f"{Fore.YELLOW} [.] {str}{Style.RESET_ALL}")
-def print_info(str):
-    print(f"{Fore.LIGHTBLUE_EX} [>] {str}{Style.RESET_ALL}")
+def print_error(str, subresult=False):
+    print(f"{"  |--" if subresult else ""}{Fore.RED} [!] {str}{Style.RESET_ALL}")
+def print_warning(str, subresult=False):
+    print(f"{"  |--" if subresult else ""}{Fore.YELLOW} [.] {str}{Style.RESET_ALL}")
+def print_info(str, subresult=False):
+    print(f"{"  |--" if subresult else ""}{Fore.LIGHTBLUE_EX} [>] {str}{Style.RESET_ALL}")
 
 def print_exact_fade(ascii_art):
     lines = ascii_art.splitlines()
@@ -61,8 +62,8 @@ def banner():
     
     pattern = rf""" 
                  .                                                           
-                /=\\                                                         
-               /===\ \                    ╔═══════════════════════════════════╗
+                /=\\                      ╔═══════════════════════════════════╗                                 
+               /===\ \                      User: {username+Fore.LIGHTRED_EX+" - Can't execute stealth scan" if username != "root" else username}
               /=====\' \                    Hostname: {platform.node()}
              /=======\'' \                  OS Version: {platform.system()}
             /=========\ ' '\                Python Version: {platform.python_version()}   
@@ -81,6 +82,7 @@ def banner():
     print_exact_fade(pattern)
 
 def help():
+    
     print("""
     Usage: python3 main.py <host>
           
@@ -98,14 +100,21 @@ def help():
         python3 main.py 127.0.0.1 -p 0-65535 -sS -v
     """)
 
-def verify_port(host, port, timeout=2, stealth=False) -> bool:
+def verify_port(host, port, timeout=2, stealth=False) -> dict:
     if not stealth:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(timeout)
 
             result = s.connect_ex((host, port))
+            response = s.recv(1024)
+            latency = result.getsockname()[1] - s
+            
             if result == 0:
-                return True
+                return {
+                        "result": True,
+                        "latency": latency,
+                        "response": response
+                        }
     else:
         #create packet
         pkt = IP(dst=host)/TCP(dport=port, flags="S")
@@ -143,10 +152,13 @@ if __name__ == "__main__":
 
         print_info(f"Scanning {ip}")
 
-        if args.port:
+        if '-' in args.port:
             ports = args.port.split("-")
             ports = list(map(int, ports))
-        
+
+        if ',' in args.port:
+            ports = args.port.split(",")
+            ports = list(map(int, ports))
     
         for port in ports:
             if verify_port(ip, port,stealth=args.stealth):
