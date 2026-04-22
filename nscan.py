@@ -117,14 +117,19 @@ def verify_port(host, port, timeout=2, stealth=False) -> dict:
                         }
     else:
         #create packet
+        
         pkt = IP(dst=host)/TCP(dport=port, flags="S")
         #send packet
         resp = sr1(pkt, timeout=timeout, verbose=False)
         #check for response
         if resp and resp.haslayer(TCP):
-            if resp.getlayer(TCP).flags == 0x12:
-                return True
-        return False
+            if resp.getlayer(TCP).flags == 0x12 : # SA = 0001 0010 = SYN ACK
+                
+                return {
+                    "result": True,
+                    "ttl": resp.getlayer(IP).ttl
+                }
+        return {"result": False}
 
 
 
@@ -161,5 +166,17 @@ if __name__ == "__main__":
             ports = list(map(int, ports))
     
         for port in ports:
-            if verify_port(ip, port,stealth=args.stealth):
-                print_result(f"Port {port} is open",subresult=True)
+            result = verify_port(ip, port,stealth=args.stealth)
+            if result['result']:
+
+                print_result(f"Port {port} is open")
+
+                if not args.stealth:
+                    print_result(f"Latency: {result['latency']}ms") if args.verbose else None
+                    print_result(f"Response: {result['response'][0-30]}") if args.verbose else None
+                else:
+                    print_result(f"TTL: {result['ttl']}") if args.verbose else None
+            else:
+                print_error(f"Port {port} is closed")
+
+
