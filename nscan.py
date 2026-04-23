@@ -1,4 +1,5 @@
 import os
+import time
 import argparse
 import socket
 import platform
@@ -39,6 +40,7 @@ def print_exact_fade(ascii_art):
 
 def banner():
 
+    
     def get_interface_name():
         for interface in netifaces.interfaces():
             if interface == 'lo':
@@ -100,38 +102,48 @@ def help():
         python3 main.py 127.0.0.1 -p 0-65535 -sS -v
     """)
 
-def verify_port(host, port, timeout=2, stealth=False) -> dict:
+def verify_port(host, port, timeout=1, stealth=False) -> dict:
+    start_time = time.time()
     if not stealth:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(timeout)
-
+            latency = (time.time() - start_time) * 1000 #ms
             result = s.connect_ex((host, port))
-            response = s.recv(1024)
-            latency = result.getsockname()[1] - s
-            
+
             if result == 0:
+                try:
+                    response = s.recv(1024)
+                except:
+                    response = None
+                
+                
                 return {
                         "result": True,
                         "latency": latency,
                         "response": response
                         }
+            return {
+                    "result": False,
+                    "latency": latency,
+                    "response": None
+                    }
     else:
         #create packet
         
         pkt = IP(dst=host)/TCP(dport=port, flags="S")
         #send packet
         resp = sr1(pkt, timeout=timeout, verbose=False)
+        latency = (time.time() - start_time) * 1000 #ms
         #check for response
         if resp and resp.haslayer(TCP):
             if resp.getlayer(TCP).flags == 0x12 : # SA = 0001 0010 = SYN ACK
                 
                 return {
                     "result": True,
-                    "ttl": resp.getlayer(IP).ttl
+                    "ttl": resp.getlayer(IP).ttl,
+                    "latency": latency
                 }
-        return {"result": False}
-
-
+        return {"result": False, "ttl": None, "latency": latency}
 
 
 if __name__ == "__main__":
@@ -155,7 +167,7 @@ if __name__ == "__main__":
 
     for ip in ip_list:
 
-        print_info(f"Scanning {ip}")
+        print_info(f"Scanning {ip}") if args.verbose else None
 
         if '-' in args.port:
             ports = args.port.split("-")
@@ -176,7 +188,5 @@ if __name__ == "__main__":
                     print_result(f"Response: {result['response'][0-30]}") if args.verbose else None
                 else:
                     print_result(f"TTL: {result['ttl']}") if args.verbose else None
-            else:
-                print_error(f"Port {port} is closed")
 
 
